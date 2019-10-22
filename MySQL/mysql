@@ -1,0 +1,62 @@
+
+mysql> explain select uid, media_id from test_table_aa where uid =16502541 order by insert_time desc limit 30 offset 2;
++----+-------------+---------------+------------+------+-------------------------------------+-----------------+---------+-------+------+----------+-------------+
+| id | select_type | table         | partitions | type | possible_keys                       | key             | key_len | ref   | rows | filtered | Extra       |
++----+-------------+---------------+------------+------+-------------------------------------+-----------------+---------+-------+------+----------+-------------+
+|  1 | SIMPLE      | test_table_aa | NULL       | ref  | unique_uid_media_id,uid_insert_time | uid_insert_time | 9       | const |    1 |   100.00 | Using where |
++----+-------------+---------------+------------+------+-------------------------------------+-----------------+---------+-------+------+----------+-------------+
+1 row in set, 1 warning (0.00 sec)
+
+
+mysql> explain select uid, media_id from test_table_aa where uid =16502541 order by insert_time desc;
++----+-------------+---------------+------------+------+---------------------+---------------------+---------+-------+------+----------+---------------------------------------+
+| id | select_type | table         | partitions | type | possible_keys       | key                 | key_len | ref   | rows | filtered | Extra                                 |
++----+-------------+---------------+------------+------+---------------------+---------------------+---------+-------+------+----------+---------------------------------------+
+|  1 | SIMPLE      | test_table_aa | NULL       | ref  | unique_uid_media_id | unique_uid_media_id | 9       | const |    1 |   100.00 | Using index condition; Using filesort |
++----+-------------+---------------+------------+------+---------------------+---------------------+---------+-------+------+----------+---------------------------------------+
+1 row in set, 1 warning (0.00 sec)
+
+
+mysql> explain select count(*) from test_table_aa where uid =16502541 ;
++----+-------------+---------------+------------+------+-------------------------------------+---------------------+---------+-------+------+----------+-------------+
+| id | select_type | table         | partitions | type | possible_keys                       | key                 | key_len | ref   | rows | filtered | Extra       |
++----+-------------+---------------+------------+------+-------------------------------------+---------------------+---------+-------+------+----------+-------------+
+|  1 | SIMPLE      | test_table_aa | NULL       | ref  | unique_uid_media_id,uid_insert_time | unique_uid_media_id | 9       | const |    1 |   100.00 | Using index |
++----+-------------+---------------+------------+------+-------------------------------------+---------------------+---------+-------+------+----------+-------------+
+
+Using index (JSON property: using_index)
+
+The column information is retrieved from the table using only information in the index tree without having to do an additional seek to read the actual row. 
+This strategy can be used when the query uses only columns that are part of a single index. 
+
+For InnoDB tables that have a user-defined clustered index, 
+that index can be used even when Using index is absent from the Extra column. This is the case if type is index and key is PRIMARY.
+
+
+Using where (JSON property: attached_condition)
+
+A WHERE clause is used to restrict which rows to match against the next table or send to the client.
+Unless you specifically intend to fetch or examine all rows from the table,
+you may have something wrong in your query if the Extra value is not Using where and the table join type is ALL or index. 
+
+Using where has no direct counterpart in JSON-formatted output; the attached_condition property contains any WHERE condition used.
+
+# type
+ALL：Full Table Scan， MySQL将遍历全表以找到匹配的行
+index：Full Index Scan，index与ALL区别为index类型只遍历索引树
+range：索引范围扫描，对索引的扫描开始于某一点，返回匹配值域的行，常见于between、<、>等的查询
+ref：非唯一性索引扫描，返回匹配某个单独值的所有行。常见于使用非唯一索引即唯一索引的非唯一前缀进行的查找
+eq_ref：唯一性索引扫描，对于每个索引键，表中只有一条记录与之匹配。常见于主键或唯一索引扫描
+const、system：当MySQL对查询某部分进行优化，并转换为一个常量时，使用这些类型访问。如将主键置于where列表中，MySQL就能将该查询转换为一个常量
+NULL：MySQL在优化过程中分解语句，执行时甚至不用访问表或索引
+
+#Extra
+Using temporary         表示MySQL需要使用临时表来存储结果集，常见于排序和分组查询
+Using filesort          MySQL中无法利用索引完成的排序操作称为“文件排序”
+Using Index             表示直接访问索引就能够获取到所需要的数据（覆盖索引），不需要通过索引回表；
+   覆盖索引： 如果一个索引包含（或者说覆盖）所有需要查询的字段的值。我们称之为“覆盖索引”。如果索引的叶子节点中已经包含要查询的数据，那么还有什么必要再回表查询呢？
+Using Index Condition
+    在MySQL 5.6版本后加入的新特性（Index Condition Pushdown）;会先条件过滤索引，过滤完索引后找到所有符合索引条件的数据行，随后用 WHERE 子句中的其他条件去过滤这些数据行；
+Using where
+    表示MySQL服务器在存储引擎收到记录后进行“后过滤”（Post-filter）,如果查询未能使用索引，Using where的作用只是提醒我们MySQL将用where子句来过滤结果集。
+    这个一般发生在MySQL服务器，而不是存储引擎层。一般发生在不能走索引扫描的情况下或者走索引扫描，但是有些查询条件不在索引当中的情况下
